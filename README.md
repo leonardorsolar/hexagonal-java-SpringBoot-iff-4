@@ -10,259 +10,240 @@ Neste projeto, construiremos um **CRUD de Clientes**, explorando todas as camada
 
 ---
 
-## 🔁 Etapa 3: Camada de Aplicação - Criação do Use Case
+## 🔁 Etapa 4: Camada de infrastructure — Criação do Adaptador para Consulta de Endereço via CEP (API Externa - ViaCEP)
 
-Depois de modelarmos as classes de domínio `Customer` e `Address`, o próximo passo é iniciar a **camada de aplicação**, responsável por orquestrar os **casos de uso** do sistema.
+Após modelarmos as classes de domínio `Customer` e `Address`, e o caso de uso `CreateCustomerUseCase`, nosso próximo passo é criar o **adaptador da porta de saída** que irá implementar a interface `AddressLookupOutputPort`.
 
-Nesta terceira etapa, nosso foco será a **criação do primeiro caso de uso** da aplicação, com os seguintes objetivos:
-
--   ✅ **Isolar a lógica do caso de uso da aplicação**
--   ✅ **Garantir testabilidade e clareza da regra de negócio**
--   ✅ **Promover o desacoplamento entre as camadas**
-
-Essa separação permite manter o código mais **limpo, reutilizável e fácil de evoluir**, algo essencial em sistemas baseados em microsserviços.
+Este adaptador será responsável por buscar o endereço a partir de um CEP utilizando a **API pública do ViaCEP**.
 
 ---
 
-### 📌 O que é um Use Case?
+### 🎯 Objetivo da etapa:
 
-Um **Use Case (caso de uso)** representa uma **ação específica** que o sistema realiza para atender a uma necessidade de negócio. Exemplos comuns incluem:
+Criar um **cliente HTTP (adaptador)** para:
 
--   Criar um cliente
--   Buscar um cliente por ID
--   Atualizar os dados de um cliente
--   Excluir um cliente
-
-Na Arquitetura Hexagonal, os use cases atuam como a **ponte entre o domínio e as interfaces externas**, centralizando a lógica de aplicação e mantendo a separação de responsabilidades.
+-   ✅ **Isolar a lógica de integração externa**, mantendo o domínio e os casos de uso independentes.
+-   ✅ **Permitir testes simples e previsíveis**, substituindo a chamada real por mocks ou fakes durante os testes.
+-   ✅ **Desacoplar a aplicação da tecnologia de infraestrutura**, seguindo os princípios da arquitetura hexagonal.
 
 ---
 
-## ✏️ Parte 1: Criação do caso de uso "Criar Cliente" (`CreateCustomerUseCase`)
+### ⚠️ Importante:
 
-(criar, registrar, inserir)
+Como a resposta da API do ViaCEP vem em **formato JSON**, precisaremos criar uma classe auxiliar chamada `ViaCepResponseDTO`, que servirá como **modelo temporário para receber a resposta da API** e convertê-la em um objeto do nosso domínio: `Address`.
 
-Vamos começar criando a classe `CreateCustomerUseCase`, responsável por:
+---
 
--   Receber os dados de entrada (geralmente por DTO ou parâmetros simples);
--   Criar uma instância da entidade `Customer`;
--   Delegar a persistência ao repositório (interface/porta de saída);
--   Retornar uma resposta ou confirmação da operação.
+Excelente pergunta para o tutorial! Aqui está uma explicação clara, objetiva e didática:
 
-# Camada Application
+---
 
-```
-src/
-├── application/
-│   └── usecase/
-│       └── CreateCustomerUseCase.java
-```
+### 📌 O que é um adaptador?
+
+Um **adaptador** é uma **classe que conecta a aplicação ao mundo externo**.
+
+Na arquitetura hexagonal, ele é responsável por **implementar uma porta** (interface) definida pela aplicação. O adaptador sabe **como** se comunicar com outras tecnologias, como:
+
+-   APIs externas (ex: ViaCEP)
+-   Banco de dados
+-   Fila de mensagens (ex: Kafka)
+-   Interfaces web (ex: controllers)
+
+---
+
+### 🔁 Por que usar adaptadores?
+
+-   ✅ **Desacoplamento**: sua aplicação não depende diretamente de bibliotecas ou serviços externos.
+-   ✅ **Facilidade de testes**: você pode simular (mockar) os adaptadores nos testes.
+-   ✅ **Reusabilidade**: você pode trocar a implementação sem mudar a regra de negócio.
+
+---
+
+### 🧱 Exemplo no seu projeto
+
+| Componente                | Papel                                             |
+| ------------------------- | ------------------------------------------------- |
+| `AddressLookupOutputPort` | Porta de saída (interface da aplicação)           |
+| `ViaCepAddressAdapter`    | Adaptador (implementa a interface e acessa a API) |
+
+---
+
+---
+
+## ✏️ Parte 1: Criação do adaptador de saída do cliente (`ViaCepAddressAdapter`)
+
+> Nesta etapa, já tinhamos uma **porta de saída** chamada `AddressLookupOutputPort`, responsável pela interface de entrada na aplicação
+>
+> Sua implementação concreta, chamada `ViaCepAddressAdapter`, realizará a **consulta HTTP à API pública do ViaCEP**, acessando a URL:
+>
+> ```
+> https://viacep.com.br/ws/{cep}/json
+> ```
+>
+> Exemplo real:
+> [https://viacep.com.br/ws/28300000/json](https://viacep.com.br/ws/28300000/json)
+>
+> A resposta da API retorna os dados do endereço no formato JSON, que transformamos em um objeto `Address` do domínio.
+>
+> Essa comunicação externa é encapsulada dentro do adaptador, garantindo que o restante da aplicação continue desacoplado da lógica HTTP.
 
 Vamos lá!
 
--   Acesse a pasta src/main/java/com/example/hexagonal/application/usecase
+Possíveis nomes:
+| Nome da Implementação | Motivo |
+| ------------------------------ | -------------------------------------------------------------------------------- |
+| `AddressLookupRestAdapter` | Se for uma chamada via REST/HTTP para um serviço externo |
+| `ViaCepAddressAdapter` | Se for uma implementação específica que usa a API ViaCEP |
+| `HttpAddressLookupAdapter` | Se a busca for feita via cliente HTTP genérico |
+| `AddressLookupExternalService` | Se quiser indicar que a implementação se conecta a um serviço externo |
+| `AddressLookupRestClient` | Comum quando a implementação usa um client HTTP (como RestTemplate ou WebClient) |
 
--   Dentro de usecase crie a classe CreateCustomerUseCase.java
+Utilizaremos `ViaCepAddressAdapter`
 
--   Dentro da classe adicione o método para criar o cliente
-    -   O método precisa receber por parâmetro o cliente (customer) e o cep(zipCode). Oberve utilizar o cep para acessar uma outra aplicação (api externa) que nos infrominformará o endereço do cliente.
-    -   Dentro do método iremos pegar o endereço do cliente
-        -   Precisamos criar a conexão com o microserviço. Contudo não vamos ter acesso direto e sim a comunicação desacoplada, através de portas.
-    -   Dentro do método iremos criar o cliente
-        -   Precisamos criar a conexão com o banco de dados.Contudo não vamos ter acesso direto e sim a comunicação desacoplada, através de portas.
+-   Acesse a pasta src/main/java/com/example/hexagonal/infrastructure/adapter/output/client
 
-**Passo 1: Criando o método create e pegando o enedereço**
+-   Dentro de client crie a classe ViaCepAddressAdapter.java
+
+### 📌 O que essa classe fará?
+
+Ela será responsável por **buscar o endereço do cliente** com base no CEP, consultando uma **API externa (ViaCEP)**. Essa consulta será feita **através de uma porta de saída**, respeitando o princípio de desacoplamento da arquitetura hexagonal.
+
+---
+
+### 🧱 O que implementar no método:
+
+-   O método precisa receber:
+
+    -   Um **cliente (`Customer`)**
+    -   Um **CEP (`zipCode`)**
+
+-   Dentro do método:
+
+    -   Vamos **usar o CEP para buscar o endereço** em uma **aplicação externa** (o microserviço do ViaCEP).
+    -   Essa comunicação será feita através da **porta `AddressLookupOutputPort`**, que será implementada pelo adaptador `ViaCepAddressAdapter`.
+
+-   Após buscar o endereço:
+
+    -   O endereço será **associado ao cliente**
+    -   E em seguida, o cliente será salvo no banco de dados.
+
+> 💡 Importante: **não acessamos diretamente o banco de dados** nem o serviço externo. Tudo será feito **por meio das portas** (interfaces), mantendo o domínio da aplicação isolado e testável.
+
+---
+
+**Passo 1: Criando o adapatdor**
+
+O adaptador é implementação concreta da porta de saída `AddressLookupOutputPort` da camada application
+
+Mas para utilizarmos o adaptador, precisaríamos também de criar uma classe ViaCepResponseDTO.java que irá converter a resposta em Address.
+
+A API do ViaCEP retorna os dados de endereço em formato JSON. Para que o Java consiga entender e utilizar essa resposta, precisamos de uma classe que represente essa estrutura.
+
+Essa classe é chamada de DTO (Data Transfer Object). Ela serve como um "modelo temporário" para receber os dados da API e depois convertê-los em um objeto do nosso domínio (Address).
+
+Onde incluir a classe ViaCepResponse.java?
+Como ela é usada apenas para representar a resposta da API externa (ViaCEP), a melhor prática é colocá-la junto com o adaptador que consome essa API.
+
+src/main/java/com/example/hexagonal/infrastructure/adapter/output/client/ViaCepResponse.java
+
+Assim crie o classe ViaCepResponse.java em client
+
+```lua
+└── infrastructure
+    └── adapter
+        └── output
+            └── client
+                ├── ViaCepAddressAdapter.java   ✅ adaptador da porta
+                └── ViaCepResponse.java         ✅ resposta da API ViaCEP
+
+```
 
 ```java
-package com.example.hexagonal.application.usecase;
+package com.example.hexagonal.infrastructure.adapter.output.client;
 
-import com.example.hexagonal.domain.Customer;
+public class ViaCepResponseDTO {
 
-public class CreateCustomerUseCase {
+    private String logradouro;
+    private String localidade;
+    private String uf;
 
-    public void create(Customer customer, String zipCode) {
-        var address = ???
+    public String getLogradouro() {
+        return logradouro;
     }
 
+    public void setLogradouro(String logradouro) {
+        this.logradouro = logradouro;
+    }
+
+    public String getLocalidade() {
+        return localidade;
+    }
+
+    public void setLocalidade(String localidade) {
+        this.localidade = localidade;
+    }
+
+    public String getUf() {
+        return uf;
+    }
+
+    public void setUf(String uf) {
+        this.uf = uf;
+    }
 }
 
 ```
 
-Veja que precisamos acessar o serviço que nos dará as informações mediante o envio do cep. Assim precisaríamos nos comunicar de forma desacoplada atravpes de portas.
+Criamos a classe ViaCepResponseDTO para deserializar a resposta da API externa (ViaCEP) e transformá-la em um Address, que é a classe usada dentro da nossa aplicação.
 
-Claro! Aqui está o texto **melhorado, traduzido e mais didático**, ideal para iniciantes:
-
----
-
-### ✅ **Passo 2: Criando a porta de saída da aplicação** - interface do serviço (Porta de saída)
-
-Neste passo, vamos criar uma **porta de saída**, ou seja, uma interface que permitirá que a aplicação se comunique com **um serviço externo de busca de endereço via CEP**.
-
-Quando nomeamos essa interface, temos duas abordagens possíveis:
-
--   `FindAddressByZipCodeOutputPort`: destaca a **ação específica** (buscar por CEP).
--   `AddressLookupOutputPort`: destaca o **papel da interface** (responsável por consultar endereços).
-
-Ambos estão corretos, mas para manter o código mais claro e alinhado às boas práticas, vamos optar por um nome mais simples e semântico:
-
-### 🔹 Nome escolhido: `AddressLookupOutputPort`
-
-Esse nome:
-
--   É fácil de entender;
--   Mostra que a interface é uma **porta de saída** (`OutputPort`);
--   Reflete bem o propósito: **buscar um endereço** externo com base no CEP.
-
----
-
-Acesse src/main/java/com/example/hexagonal/application/port/output
-
-Crie o arquivo `AddressLookupOutputPort.java`
+Com a classe de conversão pronta, podemo criar a classe ViaCepAddressAdapter
 
 ```java
-package com.example.hexagonal.application.port.output;
+package com.example.hexagonal.infrastructure.adapter.output.client;
 
+import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestTemplate;
+
+import com.example.hexagonal.application.port.output.AddressLookupOutputPort;
 import com.example.hexagonal.domain.Address;
 
-public interface AddressLookupOutputPort {
+@Component
+public class ViaCepAddressAdapter implements AddressLookupOutputPort {
 
-    Address findByZipCode(String zipcode);
+    private final RestTemplate restTemplate = new RestTemplate();
 
+    @Override
+    public Address findByZipCode(String zipcode) {
+        String url = "https://viacep.com.br/ws/" + zipcode + "/json";
+        ViaCepResponseDTO response = restTemplate.getForObject(url, ViaCepResponseDTO.class);
+
+        return new Address(
+            response.getLogradouro(),   // street
+            response.getLocalidade(),   // city
+            response.getUf()            // state
+        );
+    }
 }
 
 ```
 
-Uma **interface** em Java é um **contrato** que define **métodos que uma classe deve implementar**, mas **sem fornecer a implementação** desses métodos.
-
--   A interface **declara** que quem implementá-la deve fornecer um método `findByZipCode`.
--   Serve para **desacoplar** a lógica da aplicação da forma como os dados são obtidos (ex: API externa).
--   Na arquitetura hexagonal, isso permite trocar a implementação (ex: mudar a API) sem alterar a lógica principal.
-
-👉 **Resumo**: Interface é uma forma de dizer “_alguém vai fazer isso_, mas eu não me importo _como_”.
-
-Agora que temos uma forma de desacoplar o usecase, vamos implementá-lo.
-
-### ✅ **Passo 3: Adicionando a porta no nosso caso de uso**
-
-Precisamos agora adicionar o atributo addressLookupOutputPort.
-Depois adicionamos o serviço de buscar o cep por injeção de dependência no construtor da aplicação.
-Veja que não usaremos os decorator do famework springboot para injetar a dependência do serviço de buscar o cep pois iremos desacoplar o usecase das tecnologias.
-Depois com o enedereço recebido, podemos definir o endereço do cliente
-
-```java
-package com.example.hexagonal.application.usecase;
-
-import com.example.hexagonal.application.port.output.AddressLookupOutputPort;
-import com.example.hexagonal.domain.Customer;
-
-public class CreateCustomerUseCase {
-
-    private final AddressLookupOutputPort addressLookupOutputPort;
-
-    public CreateCustomerUseCase(AddressLookupOutputPort addressLookupOutputPort) {
-        this.addressLookupOutputPort = addressLookupOutputPort;
-    }
-
-    public void create(Customer customer, String zipCode) {
-        var address = addressLookupOutputPort.findByZipCode(zipCode);
-        customer.setAddress(address);
-    }
-
-}
-
-```
-
-Veja que via porta de saída temos como acessar o serviço da interface. Claro que depois teremos que criar uam classe concreta que implementará a interface para realmente acessar a api externa.
-
-### ✅ **Passo 4: Inserir o cliente**
-
-Precisamos agora adicionar o cliente, sem ter acesso a base dados diretamente. Assim precisamos criar mais um porta de saída para acessar o banco de dados.
-
-**Criar a interface do repositório (Porta de saída)**
-
-Acesse src/main/java/com/example/hexagonal/application/port/output
-
-Crie o arquivo `CustomerPersistenceOutputPort.java`
-
-```java
-package com.example.hexagonal.application.port.output;
-
-import com.example.hexagonal.domain.Customer;
-
-public interface CustomerPersistenceOutputPort {
-
-    void save(Customer customer);
-
-}
-```
-
-Podemos agora usar a porta de saída `CustomerPersistenceOutputPort`
-
-```java
-package com.example.hexagonal.application.usecase;
-
-import com.example.hexagonal.application.port.output.AddressLookupOutputPort;
-import com.example.hexagonal.application.port.output.CustomerPersistenceOutputPort;
-import com.example.hexagonal.domain.Customer;
-
-public class CreateCustomerUseCase {
-
-    private final AddressLookupOutputPort addressLookupOutputPort;
-    private final CustomerPersistenceOutputPort customerPersistenceOutputPort;
-
-    public CreateCustomerUseCase(AddressLookupOutputPort addressLookupOutputPort,
-            CustomerPersistenceOutputPort customerPersistenceOutputPort) {
-        this.addressLookupOutputPort = addressLookupOutputPort;
-        this.customerPersistenceOutputPort = customerPersistenceOutputPort;
-    }
-
-    public void create(Customer customer, String zipCode) {
-        var address = addressLookupOutputPort.findByZipCode(zipCode);
-        customer.setAddress(address);
-        customerPersistenceOutputPort.save(customer);
-    }
-
-}
-
-```
-
-## Estudo complemenetar:
+Isso mantém a responsabilidade bem isolada: infraestrutura lida com o mundo externo, enquanto o domínio e a aplicação continuam limpos e desacoplados.
 
 ---
 
-## Como dar nomes para as portas que se comunicam com o mundo externo?
-
-Na arquitetura hexagonal, quando sua aplicação precisa conversar com algo **fora dela** — como um serviço externo, banco de dados ou sistema de mensagens — usamos **interfaces chamadas de portas de saída (output ports)**.
-
-Por exemplo:
-
--   Queremos buscar o endereço de um cliente usando o CEP num serviço externo.
--   Essa comunicação é uma **porta de saída** porque nossa aplicação está **saindo para buscar informação**.
-
----
-
-## Exemplos de nomes para essa porta de saída:
-
--   `FindAddressByZipCodeOutputPort`
--   `AddressLookupOutputPort`
--   `AddressLookupGateway`
--   `AddressLookupAdapter`
--   `AddressLookupService`
+| Termo técnico                  | Significado claro no tutorial                                  |
+| ------------------------------ | -------------------------------------------------------------- |
+| API externa (external service) | Serviço fora da aplicação que fornece dados via internet       |
+| ViaCEP                         | Serviço gratuito de consulta de endereço via CEP               |
+| Requisição HTTP GET            | Pedido que busca informações em uma URL                        |
+| Porta de saída (OutputPort)    | Interface que define como a aplicação se comunica para fora    |
+| Adaptador (Adapter)            | Classe que implementa uma porta de saída e faz o trabalho real |
 
 ---
 
-## Por que escolher `AddressLookupOutputPort`?
-
--   Ele deixa claro que é uma **porta de saída** (OutputPort).
--   Mostra o propósito: **buscar um endereço** (Address Lookup).
--   Facilita a organização do código, ajudando a identificar que essa interface é uma conexão com algo externo.
-
 ---
 
-         |
-
-obs.: A camada **domain** deve ser independente de qualquer tecnologia externa: ela não pode conter dependências de frameworks, nem ser acessada diretamente por camadas externas sem passar pelas interfaces (portas) da aplicação. Veja que importamos os getter e setter na mão e não utilizamos a tecnologia lombok do framework Spring.
-
-## ✏️ Parte 2: Criando o Teste de Integração do Use Case
+## ✏️ Parte 2: Criar um teste de integração real (chamando a API)
 
 Agora que temos o `CreateCustomerUseCase` implementado, vamos criar um **teste de integração simples** para garantir que o caso de uso funciona corretamente, integrando a busca de endereço e a persistência do cliente.
 
@@ -270,16 +251,17 @@ Agora que temos o `CreateCustomerUseCase` implementado, vamos criar um **teste d
 
 ### ✅ Objetivo do teste:
 
--   Simular a chamada do método `create()`.
--   Verificar se o endereço foi adicionado ao cliente.
--   Verificar se o cliente foi salvo corretamente.
+-   Cria a instância do adaptador.
+-   Executar o método findByZipCode do adaptador passando o cep
+-   Confirmar se os dados foram corretos
 
 ---
 
 ### 📁 Local:
 
 Crie o arquivo em:
-`src/test/java/com/example/hexagonal/CreateCustomerUseCaseIntegrationTest.java`
+`src/test/java/com/example/hexagonal/infrastructure/adapter/output/client/ViaCepAddressAdapterTest.java
+`
 
 ---
 
@@ -293,75 +275,31 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import org.junit.jupiter.api.Test;
 
-import com.example.hexagonal.application.port.output.AddressLookupOutputPort;
-import com.example.hexagonal.application.port.output.CustomerPersistenceOutputPort;
-import com.example.hexagonal.application.usecase.CreateCustomerUseCase;
 import com.example.hexagonal.domain.Address;
-import com.example.hexagonal.domain.Customer;
+import com.example.hexagonal.infrastructure.adapter.output.client.ViaCepAddressAdapter;
 
-public class CreateCustomerUseCaseIntegrationTest {
+public class ViaCepAddressAdapterTest {
 
     @Test
-    void deveCriarClienteComEndereco() {
-        // // CustomerPersistenceOutputPort persistence = new InMemoryCustomerPersistencePort();
-        // Criando a implementação em memória da porta de persistência
-        // para armazenar o cliente durante o teste
-        InMemoryCustomerPersistencePort persistence = new InMemoryCustomerPersistencePort();
+    void deveBuscarEnderecoRealDaApiViaCep() {
+        // Arrange
+        ViaCepAddressAdapter adapter = new ViaCepAddressAdapter();
 
-        // Criando a implementação fake da porta de busca de endereço,
-        // que sempre retorna um endereço fixo para o teste
-        AddressLookupOutputPort addressService = new FakeAddressLookupOutputPort();
+        // Act
+        Address address = adapter.findByZipCode("28300000"); // CEP válido da Praça da Sé - SP
 
-        // Criando o caso de uso com as implementações das portas
-        CreateCustomerUseCase useCase = new CreateCustomerUseCase(addressService, persistence);
+        System.out.println("Estado: " + address.getCity());
+        System.out.println("UF: " + address.getState());
 
-        // Criando o cliente com nome e CPF
-        Customer customer = new Customer();
-        customer.setName("Maria");
-        customer.setCpf("12345678900");
-
-        // Executando o caso de uso para criar o cliente com endereço pelo CEP
-        useCase.create(customer, "12345678");
-
-        // Imprimindo dados para verificar manualmente (opcional)
-        System.out.println("Name " + persistence.getSavedCustomer().getName());
-        System.out.println("Rua " + persistence.getSavedCustomer().getAddress().getStreet());
-
-        // Verificando se o cliente foi salvo corretamente (não nulo)
-        assertNotNull(persistence.getSavedCustomer());
-
-        // Verificando se o nome do cliente está correto
-        assertEquals("Maria", persistence.getSavedCustomer().getName());
-
-        // Verificando se o endereço atribuído ao cliente é o esperado
-        assertEquals("Rua Teste", persistence.getSavedCustomer().getAddress().getStreet());
-    }
-
-    // Implementação em memória da porta de persistência do cliente,
-    // que guarda o cliente internamente para podermos verificar depois
-    static class InMemoryCustomerPersistencePort implements CustomerPersistenceOutputPort {
-        private Customer savedCustomer;
-
-        @Override
-        public void save(Customer customer) {
-            this.savedCustomer = customer;
-        }
-
-        // Método para recuperar o cliente salvo e verificar no teste
-        public Customer getSavedCustomer() {
-            return savedCustomer;
-        }
-    }
-
-    // Implementação fake da porta de busca de endereço que sempre
-    // retorna um endereço fixo, simulando uma busca externa via CEP
-    static class FakeAddressLookupOutputPort implements AddressLookupOutputPort {
-        @Override
-        public Address findByZipCode(String zipcode) {
-            return new Address("Rua Teste", "Cidade Teste", "Estado Teste");
-        }
+        // Assert
+        assertNotNull(address);
+        assertEquals("Itaperuna", address.getCity());
+        assertEquals("RJ", address.getState());
+        // logradouro pode variar, então não fixamos aqui
     }
 }
+
+
 ```
 
 No terminal, execute na raiz do projeto:
@@ -373,66 +311,24 @@ mvn test
 Para rodar somente o teste da classe AddressTest.java com Maven, use o seguinte comando:
 
 ```bash
-mvn -Dtest=CreateCustomerUseCaseIntegrationTest test
+mvn -Dtest=ViaCepAddressAdapterTest test
 ```
 
 ---
 
 ## Explicação rápida do teste de integração
 
-Este teste verifica o funcionamento do caso de uso **CreateCustomerUseCase**, integrando duas portas de saída simuladas (fake):
+Este teste verifica se o adaptador `ViaCepAddressAdapter` consegue buscar um endereço real usando a API pública do ViaCEP.
 
--   **InMemoryCustomerPersistencePort**: armazena o cliente "em memória" para que possamos verificar se o cliente foi salvo.
--   **FakeAddressLookupOutputPort**: simula a busca de endereço externo pelo CEP, retornando um endereço fixo para o teste.
+-   **Arrange:** Cria a instância do adaptador.
+-   **Act:** Chama o método `findByZipCode` com um CEP válido.
+-   **Assert:** Confirma que o endereço retornado não é nulo e que a cidade e estado correspondem ao esperado.
 
-No teste:
-
-1. Criamos um cliente com nome e CPF.
-2. Chamamos o método `create` do caso de uso, passando o cliente e o CEP.
-3. O caso de uso obtém o endereço via `FakeAddressLookupOutputPort` e define no cliente.
-4. Salva o cliente no `InMemoryCustomerPersistencePort`.
-5. Verificamos se o cliente foi salvo (`assertNotNull`).
-6. Verificamos se o nome do cliente está correto.
-7. Verificamos se o endereço do cliente foi corretamente atribuído.
+Esse teste valida a integração com o serviço externo ViaCEP, garantindo que a comunicação e o mapeamento do JSON para o objeto `Address` funcionem corretamente.
 
 ---
 
-### Por que fazer assim?
-
--   Não dependemos de banco de dados real ou serviços externos.
--   O teste é rápido e confiável.
--   Validamos a integração entre a lógica do caso de uso e as portas de saída.
-
----
-
----
-
-Você pode ir além, criando um teste com Spring Boot, simulando a infraestrutura real (ex: MongoDB + serviço externo).
-
-## Dúvidas sobre Nomeclaturas:
-
-## Explicando outras portas do código:
-
-| Nome em inglês             | Tradução / Significado                                                  |
-| -------------------------- | ----------------------------------------------------------------------- |
-| `AddressLookupService`     | Serviço que pesquisa endereço externo                                   |
-| `CustomerPersistencePort`  | Porta para persistência (armazenamento) do cliente                      |
-| `CpfValidationMessagePort` | Porta para enviar mensagem de validação do CPF (por exemplo, via Kafka) |
-
----
-
-## Tabela comparativa de nomes:
-
-| **Nome possível**                | **Nome Sugerido**          | **O que faz**                                   | **Vantagem do nome sugerido**                                      |
-| -------------------------------- | -------------------------- | ----------------------------------------------- | ------------------------------------------------------------------ |
-| `FindAddressByZipCodeOutputPort` | `AddressLookupService`     | Busca endereço via CEP em serviço externo       | ✅ Nome curto e fácil de entender<br>✅ Mostra a função claramente |
-| `InsertCustomerOutputPort`       | `CustomerPersistencePort`  | Salva dados do cliente no banco                 | ✅ Nome genérico que pode ser usado para várias operações          |
-| `SendCpfForValidationOutputPort` | `CpfValidationMessagePort` | Envia CPF para validação via mensageria (Kafka) | ✅ Nome claro que indica uso de mensagens para validação           |
-
-Observações:
-Os nomes originais focavam mais na ação específica (Find, Insert, Send).
-Os nomes sugeridos focam mais no papel da interface dentro da aplicação — o "o que ela representa", não apenas o que ela faz.
-Isso melhora a leitura, manutenção e testes, além de seguir melhores práticas de arquitetura limpa e hexagonal.
+**Observações:** Use com cuidado: se a API do ViaCEP estiver fora do ar, o teste vai falhar.
 
 ### 📌 Próximos passos:
 
